@@ -3,7 +3,7 @@
 
 import threading
 import time
-import pickle as pl
+import _pickle as pl
 import socket
 import crc16
 import os
@@ -25,14 +25,19 @@ class pult(threading.Thread):
         print("thread started\n")
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         time.sleep(0.1)
+        
         while not self._stopped.is_set():
             if not self._data is None:
-                data = pl.dumps(self._data)#запаковываем данные
-                crc = crc16.crc16xmodem(data)#вычисляем контрольную сумму пакета
+                msg = pl.dumps(self._data)#запаковываем данные
+                client.sendto(msg, (self._ip_robot, self._port))
+            time.sleep(0.01)
+        """
+        while not self._stopped.is_set():
+            if not self._data is None:
+                crc = crc16.crc16xmodem(self._data)#вычисляем контрольную сумму пакета
                 msg = pl.dumps((data, crc))#прикрепляем вычисленную контрольную сумму к пакету данных
                 client.sendto(msg, (self._ip_robot, self._port))
-                time.sleep(0.05)
-
+        """
     def send_data(self, data):
         self._data = data
             
@@ -62,6 +67,23 @@ class robot(threading.Thread):
         server.bind((self._ip, self._port)) #запускаем сервер
         server.settimeout(self._timeout)#утсановка времени ожидания сообщения для сервера
         first_cicle = True
+
+
+        while not self._stopped.is_set():
+            self.data = None
+            try:
+                msg = server.recvfrom(1024) #пытаемся получить данные
+                if first_cicle: #если первая иттерация, то записываем IP первого устройства, приславшего пакет с данными
+                    self._ip_user = msg[1][0]
+                    print("робот захвачен", self._ip_user)
+                    first_cicle = False
+                self.data = pl.loads(msg[0])
+            except socket.timeout:
+                print("time is out")
+            except:
+                print("broken data")
+            time.sleep(0.01)
+        """
         while not self._stopped.is_set():
             self.data = None
             try:
@@ -78,7 +100,8 @@ class robot(threading.Thread):
                     print("broken data")
             except socket.timeout:
                 print("time is out")
-            time.sleep(0.05)
+            time.sleep(0.005)
+            """
         server.close()
         
     def get_data(self):
@@ -94,3 +117,4 @@ class robot(threading.Thread):
         self._stopped.set()
         print("transmit stopped")
         self.join() #ждем завершения работы потока
+
